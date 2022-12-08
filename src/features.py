@@ -154,12 +154,19 @@ def main(outdir):
     p = 0.1
     h = 2
 
+    # Generate the graph
     g = igraph.Graph.Erdos_Renyi(n, p, directed=False, loops=False)
-
     g = g.connected_components().giant()
     adj = g.get_adjacency_sparse()
+
+    # Extract features
     feats, labels = extract_hierarchical_feats_all(adj,  h)
+
     breakpoint()
+    # If features are from vertices, 'transform' them into edge features
+    # Coincidence on each pair of edges
+    # Visualize
+
 
 ##########################################################
 if __name__ == "__main__":
