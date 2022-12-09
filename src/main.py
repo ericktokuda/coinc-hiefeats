@@ -77,6 +77,7 @@ def get_coincidx_graph(dataorig, alpha, standardize, outdir):
     plt.savefig(impath)
     np.savetxt(coincpath, adj, delimiter=',')
     return adj, coincpath
+
 ##########################################################
 def get_reachable_vertices_exact(adj, vs0, h):
     """Get the vertices reachable in *exactly* h steps. This
@@ -200,6 +201,7 @@ def extract_hirarchical_feats(adj, v, h):
 
 ##########################################################
 def extract_hierarchical_feats_all(adj,  h):
+    info(inspect.stack()[0][3] + '()')
     labels = 'hn he hd hc cr'.split(' ')
     feats = []
     for v in range(adj.shape[0]):
@@ -208,6 +210,7 @@ def extract_hierarchical_feats_all(adj,  h):
 
 ##########################################################
 def vattributes2edges(g, attribs, aggreg='sum'):
+    info(inspect.stack()[0][3] + '()')
     m = g.ecount()
     for attrib in attribs:
         values = g.vs[attrib]
@@ -224,30 +227,25 @@ def plot_motifs(gorig, edges, coincpath, outdir):
     outpath = pjoin(outdir, 'coinc.pdf')
     coinc = np.loadtxt(coincpath, delimiter=',', dtype=float)
     coinc = np.power(coinc, 3)
-    g1 = igraph.Graph.Weighted_Adjacency(coinc, mode='undirected')
-    g1.delete_edges(g1.es.select(weight_lt=.6))
+    gcoinc = igraph.Graph.Weighted_Adjacency(coinc, mode='undirected')
+    gcoinc.delete_edges(gcoinc.es.select(weight_lt=.4))
 
-    breakpoint()
-
-    # comm = g1.community_multilevel(weights='weight')
-    ncomms = 7
-    comm = g1.components(mode='weak')
+    # comm = gcoinc.community_multilevel(weights='weight')
+    ncomms = 5
+    comm = gcoinc.components(mode='weak')
     szs = comm.sizes()
     largestcommids = np.flip(np.argsort(szs))[:ncomms]
     membs = np.array(comm.membership)
-    m = g1.vcount()
+    m = gcoinc.vcount()
 
     palette = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999']
     vcolours = np.array(['#d9d9d9'] * m)
-
-
 
     ##########################################################
     # Making the colormap
     from matplotlib.colors import LinearSegmentedColormap
     cm = LinearSegmentedColormap.from_list(
         'new',
-        # palette[:ncomms] + ['#d9d9d9'],
         ['#d9d9d9'] + palette[:ncomms] ,
         N = 8)
 
@@ -256,14 +254,15 @@ def plot_motifs(gorig, edges, coincpath, outdir):
                     origin ='lower', cmap = cm)
     # ax.set_title("bin: % s" % all_bin)
     fig.colorbar(im, ax=ax)
-    plt.savefig('/tmp/colorbar.pdf')
+    plt.savefig(pjoin(outdir, 'colorbar.pdf'))
 
     ##########################################################
     for i in range(ncomms):
         vcolours[np.where(membs == largestcommids[i])[0]] = palette[i]
 
     outpath = pjoin(outdir, 'coinc.pdf')
-    igraph.plot(g1, outpath, edge_width=np.abs(g1.es['weight']), bbox=(1200, 1200),
+    igraph.plot(gcoinc, outpath, edge_width=np.abs(gcoinc.es['weight']),
+                bbox=(1200, 1200),
                 vertex_size=5, vertex_color=vcolours.tolist())
 
     ##########################################################
@@ -286,34 +285,157 @@ def plot_motifs(gorig, edges, coincpath, outdir):
     m = g.ecount()
     ecolours = np.array(['#d9d9d9'] * m)
 
+    # fh = open('/tmp/titles.lst', 'w')
+    # membslbls = []
+    for i in range(ncomms):
+        ecolours[np.where(membs == i)[0]] = palette[i]
+        vv = np.unique(np.array([ [x.source, x.target] for x in np.array(g.es)[np.where(membs == i)[0]] ]).flatten())
+        # membslbls.append(np.array(g.vs['title'])[vv])
+        # fh.write(str(i) + '\n')
+        # fh.write('\n'.join(membslbls[i]))
+        # fh.write('\n\n')
+    # fh.close()
+
     outpath = pjoin(outdir, 'orig.png')
     igraph.plot(g, outpath, bbox=(1200, 1200),
                 # vertex_label=g.vs['title'],
                 vertex_color='black',
-                vertex_size=5,
+                vertex_size=50,
                 edge_color=ecolours.tolist())
-
-    
 
     outpath = pjoin(outdir, 'orig.pdf')
     igraph.plot(g, outpath, bbox=(1200, 1200),
                 # vertex_label=g.vs['title'],
                 vertex_color='black',
-                vertex_size=5,
+                vertex_size=50,
                 edge_color=ecolours.tolist())
+
+##########################################################
+def plot_motifs2(gorig, coincpath, outdir):
+    info(inspect.stack()[0][3] + '()')
+
+    outpath = pjoin(outdir, 'coinc.pdf')
+    coinc = np.loadtxt(coincpath, delimiter=',', dtype=float)
+    coinc = np.power(coinc, 3)
+    gcoinc = igraph.Graph.Weighted_Adjacency(coinc, mode='undirected')
+    gcoinc.delete_edges(gcoinc.es.select(weight_lt=.3))
+
+    # comm = gcoinc.community_multilevel(weights='weight')
+    ncomms = 5
+    comm = gcoinc.components(mode='weak')
+    szs = comm.sizes()
+    largestcommids = np.flip(np.argsort(szs))[:ncomms]
+    membs = np.array(comm.membership)
+    m = gcoinc.vcount()
+
+    palette = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999']
+    vcolours = np.array(['#d9d9d9'] * m)
+
+    ##########################################################
+    # Making the colormap
+    from matplotlib.colors import LinearSegmentedColormap
+    cm = LinearSegmentedColormap.from_list(
+        'new',
+        ['#d9d9d9'] + palette[:ncomms] ,
+        N = 8)
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(np.random.random((3,3)), interpolation ='nearest',
+                    origin ='lower', cmap = cm)
+    # ax.set_title("bin: % s" % all_bin)
+    fig.colorbar(im, ax=ax)
+    plt.savefig(pjoin(outdir, 'colorbar.pdf'))
+
+    ##########################################################
+    for i in range(ncomms):
+        vcolours[np.where(membs == largestcommids[i])[0]] = palette[i]
+
+    outpath = pjoin(outdir, 'coinc.pdf')
+    igraph.plot(gcoinc, outpath, edge_width=np.abs(gcoinc.es['weight']),
+                bbox=(1200, 1200),
+                vertex_size=20, vertex_color=vcolours.tolist())
+
+    ##########################################################
+    g = gorig.copy()
+    # eids = g.get_vids(edges)
+    # todel = set(range(g.ecount())).difference(eids)
+
+    n = g.vcount()
+    vcolours = np.array(['#d9d9d9'] * n)
+
+    g.vs['comm'] = -1
+    for i in range(ncomms):
+        aux = np.where(membs == largestcommids[i])[0]
+        g.vs[aux]['comm'] = i
+        vcolours[aux] = palette[i]
+        
+    # aux = np.array(edges)[np.where(membs == largestcommids[0])[0]]
+    # g.vs['comm'] = 0
+    # aux = np.array(edges)[np.where(membs == largestcommids[0])[0]]
+    # g.es[g.get_eids(aux)]['comm'] = 0
+
+    # g.delete_edges(todel)
+    # degs = g.degree()
+    # g.delete_vertices(np.where(np.array(degs) == 0)[0])
+
+    # membs = np.array(g.es['comm'])
+    # m = g.ecount()
+    # n = g.vcount()
+    # vcolours = np.array(['#d9d9d9'] * n)
+    # breakpoint()
+    
+
+    # fh = open('/tmp/titles.lst', 'w')
+    # membslbls = []
+    # for i in range(ncomms):
+        # vcolours[np.where(membs == i)[0]] = palette[i]
+        # vv = np.unique(np.array([ [x.source, x.target] for x in np.array(g.es)[np.where(membs == i)[0]] ]).flatten())
+        # vv = np.unique(np.array([ [x.source, x.target] for x in np.array(g.es)[np.where(membs == i)[0]] ]).flatten())
+        # membslbls.append(np.array(g.vs['title'])[vv])
+        # fh.write(str(i) + '\n')
+        # fh.write('\n'.join(membslbls[i]))
+        # fh.write('\n\n')
+    # fh.close()
+
+    outpath = pjoin(outdir, 'orig.png')
+    igraph.plot(g, outpath, bbox=(1200, 1200),
+                # vertex_label=g.vs['title'],
+                # vertex_color='black',
+                vertex_color=vcolours,
+                vertex_size=20,
+                )
+                # edge_color=ecolours.tolist())
+                # edge_color=ecolours.tolist())
+
+    outpath = pjoin(outdir, 'orig.pdf')
+    igraph.plot(g, outpath, bbox=(1200, 1200),
+                # vertex_label=g.vs['title'],
+                # vertex_color='black',
+                vertex_color=vcolours,
+                vertex_size=20,
+                )
+                # edge_color=ecolours.tolist())
+                # edge_color=ecolours.tolist())
+
 ##########################################################
 def main(outdir):
     info(inspect.stack()[0][3] + '()')
 
     random.seed(0); np.random.seed(0)
-    n = 200
-    p = 0.1
+    # n = 101
+    p = 0.05
     h = 2
 
     # Generate the graph
-    g = igraph.Graph.Erdos_Renyi(n, p, directed=False, loops=False)
+    # g = igraph.Graph.Erdos_Renyi(n, p, directed=False, loops=False)
+    # breakpoint()
+
+    g = igraph.Graph.GRG(200, radius=0.2, torus=False)
+    g.to_undirected()
+
     g = g.connected_components().giant()
     adj = g.get_adjacency_sparse()
+    info('n:{}, m:{}'.format(g.vcount(), g.ecount()))
 
     # Extract features
     vfeats, labels = extract_hierarchical_feats_all(adj,  h)
@@ -323,14 +445,11 @@ def main(outdir):
 
     g = vattributes2edges(g, labels, aggreg='sum')
     efeats = np.array([g.es[l] for l in labels]).T
-    coinc, coincpath = get_coincidx_graph(efeats, .5, True, outdir)
-
-    edges = [[e.source, e.target] for e in g.es]
-    plot_motifs(g, edges, coincpath, outdir)
-    
-    # If features are from vertices, 'transform' them into edge features
-    # Coincidence on each pair of edges
-    # Visualize
+    # coinc, coincpath = get_coincidx_graph(efeats, .5, True, outdir)
+    coinc, coincpath = get_coincidx_graph(vfeats, .5, True, outdir)
+    # edges = [[e.source, e.target] for e in g.es]
+    # plot_motifs(g, edges, coincpath, outdir)
+    plot_motifs2(g, coincpath, outdir)
 
 
 ##########################################################
