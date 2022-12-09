@@ -10,13 +10,15 @@ from os.path import isfile
 import inspect
 
 import numpy as np
+import scipy; import scipy.optimize
 import matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from myutils import info, create_readme
 import igraph
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from itertools import combinations
+from itertools import product, combinations
+from myutils import parallelize
 
 ##########################################################
 def interiority(dataorig):
@@ -50,15 +52,9 @@ def coincidence(data, a):
     return inter * jac
 
 ##########################################################
-def get_coincidx_graph(dataorig, alpha, standardize, outdir):
-    """Get graph of individual elements"""
+def get_coincidx_values(dataorig, alpha, standardize, t, d):
+    """Get coincidence value between each combination in @dataorig"""
     info(inspect.stack()[0][3] + '()')
-    coincpath = pjoin(outdir, 'coinc.csv')
-    impath = pjoin(outdir, 'coinc.png')
-
-    if isfile(coincpath):
-        return np.loadtxt(coincpath, delimiter=','), coincpath
-
     n, m = dataorig.shape
     if standardize:
         data = StandardScaler().fit_transform(dataorig)
@@ -71,12 +67,9 @@ def get_coincidx_graph(dataorig, alpha, standardize, outdir):
         c = coincidence(data2, alpha)
         adj[comb[0], comb[1]] = adj[comb[1], comb[0]] = c
 
-    fig, ax = plt.subplots()
-    im = ax.imshow(adj, cmap='hot', interpolation='nearest')
-    fig.colorbar(im)
-    plt.savefig(impath)
-    np.savetxt(coincpath, adj, delimiter=',')
-    return adj, coincpath
+    adj = threshold_values(adj, t)
+    adj = np.power(adj, d)
+    return adj
 
 ##########################################################
 def get_reachable_vertices_exact(adj, vs0, h):
@@ -169,153 +162,122 @@ def vattributes2edges(g, attribs, aggreg='sum'):
     return g
 
 ##########################################################
-def plot_motifs(gorig, coincpath, outdir):
-    info(inspect.stack()[0][3] + '()')
-
-    outpath = pjoin(outdir, 'coinc.pdf')
-    coinc = np.loadtxt(coincpath, delimiter=',', dtype=float)
-    coinc = np.power(coinc, 3)
-    gcoinc = igraph.Graph.Weighted_Adjacency(coinc, mode='undirected')
-    gcoinc.delete_edges(gcoinc.es.select(weight_lt=.3))
-
-    # comm = gcoinc.community_multilevel(weights='weight')
-    ncomms = 5
-    comm = gcoinc.components(mode='weak')
-    szs = comm.sizes()
-    largestcommids = np.flip(np.argsort(szs))[:ncomms]
-    membs = np.array(comm.membership)
-    m = gcoinc.vcount()
-
-    palette = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999']
-    vcolours = np.array(['#d9d9d9'] * m)
-
-    ##########################################################
-    # Making the colormap
-    from matplotlib.colors import LinearSegmentedColormap
-    cm = LinearSegmentedColormap.from_list(
-        'new',
-        ['#d9d9d9'] + palette[:ncomms] ,
-        N = 8)
-
-    fig, ax = plt.subplots()
-    im = ax.imshow(np.random.random((3,3)), interpolation ='nearest',
-                    origin ='lower', cmap = cm)
-    # ax.set_title("bin: % s" % all_bin)
-    fig.colorbar(im, ax=ax)
-    plt.savefig(pjoin(outdir, 'colorbar.pdf'))
-
-    ##########################################################
-    for i in range(ncomms):
-        vcolours[np.where(membs == largestcommids[i])[0]] = palette[i]
-
-    outpath = pjoin(outdir, 'coinc.pdf')
-    igraph.plot(gcoinc, outpath, edge_width=np.abs(gcoinc.es['weight']),
-                bbox=(1200, 1200),
-                vertex_size=20, vertex_color=vcolours.tolist())
-
-    ##########################################################
-    g = gorig.copy()
-    # eids = g.get_vids(edges)
-    # todel = set(range(g.ecount())).difference(eids)
-
-    n = g.vcount()
-    vcolours = np.array(['#d9d9d9'] * n)
-
-    g.vs['comm'] = -1
-    for i in range(ncomms):
-        aux = np.where(membs == largestcommids[i])[0]
-        g.vs[aux]['comm'] = i
-        vcolours[aux] = palette[i]
-        
-    # aux = np.array(edges)[np.where(membs == largestcommids[0])[0]]
-    # g.vs['comm'] = 0
-    # aux = np.array(edges)[np.where(membs == largestcommids[0])[0]]
-    # g.es[g.get_eids(aux)]['comm'] = 0
-
-    # g.delete_edges(todel)
-    # degs = g.degree()
-    # g.delete_vertices(np.where(np.array(degs) == 0)[0])
-
-    # membs = np.array(g.es['comm'])
-    # m = g.ecount()
-    # n = g.vcount()
-    # vcolours = np.array(['#d9d9d9'] * n)
-    # breakpoint()
-    
-
-    # fh = open('/tmp/titles.lst', 'w')
-    # membslbls = []
-    # for i in range(ncomms):
-        # vcolours[np.where(membs == i)[0]] = palette[i]
-        # vv = np.unique(np.array([ [x.source, x.target] for x in np.array(g.es)[np.where(membs == i)[0]] ]).flatten())
-        # vv = np.unique(np.array([ [x.source, x.target] for x in np.array(g.es)[np.where(membs == i)[0]] ]).flatten())
-        # membslbls.append(np.array(g.vs['title'])[vv])
-        # fh.write(str(i) + '\n')
-        # fh.write('\n'.join(membslbls[i]))
-        # fh.write('\n\n')
-    # fh.close()
-
-    outpath = pjoin(outdir, 'orig.png')
-    igraph.plot(g, outpath, bbox=(1200, 1200),
-                # vertex_label=g.vs['title'],
-                # vertex_color='black',
-                vertex_color=vcolours,
-                vertex_size=20,
-                )
-                # edge_color=ecolours.tolist())
-                # edge_color=ecolours.tolist())
-
-    outpath = pjoin(outdir, 'orig.pdf')
-    igraph.plot(g, outpath, bbox=(1200, 1200),
-                # vertex_label=g.vs['title'],
-                # vertex_color='black',
-                vertex_color=vcolours,
-                vertex_size=20,
-                )
-                # edge_color=ecolours.tolist())
-                # edge_color=ecolours.tolist())
-
-##########################################################
 def generate_graph(modelstr, outdir):
-    """Short description """
+    """Generate an undirected graph according to @modelstr. It should be MODEL,N,PARAM"""
     info(inspect.stack()[0][3] + '()')
-    # g = igraph.Graph.Erdos_Renyi(n, p, directed=False, loops=False)
-    # breakpoint()
-    # n = 101
-    p = 0.05
-    h = 2
-    g = igraph.Graph.GRG(200, radius=0.2, torus=False)
-    g.to_undirected()
 
+    parsed = modelstr.split(',')
+    model = parsed[0];
+    n = int(parsed[1])
+    k = float(parsed[2])
+
+    if model == 'er':
+        erdosprob = k / n
+        if erdosprob > 1: erdosprob = 1
+        g = igraph.Graph.Erdos_Renyi(n, erdosprob)
+    elif model == 'ba':
+        m = round(k / 2)
+        if m == 0: m = 1
+        g = igraph.Graph.Barabasi(n, m)
+    elif model == 'gr':
+        r = get_rgg_params(n, k)
+        g = igraph.Graph.GRG(n, radius=r, torus=False)
+
+    g.to_undirected()
     g = g.connected_components().giant()
-    adj = g.get_adjacency_sparse()
-    return g, adj
+    gpath = pjoin(outdir, 'graph.png')
+    coords = g.layout(layout='fr')
+    return g, g.get_adjacency_sparse()
 
 ##########################################################
-def extract_features(adj):
+def extract_features(adj, h):
     vfeats, labels = extract_hierarchical_feats_all(adj,  h)
     return np.array(vfeats), labels
 
+#############################################################
+def get_rgg_params(nvertices, avgdegree):
+    rggcatalog = {
+        '20000,6': 0.056865545,
+    }
+
+    if '{},{}'.format(nvertices, avgdegree) in rggcatalog.keys():
+        return rggcatalog['{},{}'.format(nvertices, avgdegree)]
+
+    def f(r):
+        g = igraph.Graph.GRG(nvertices, r)
+        return np.mean(g.degree()) - avgdegree
+
+    r = scipy.optimize.brentq(f, 0.0001, 10000)
+    return r
+
+##########################################################
+def plot_graph(g, coordsin, labels, outpath):
+    coords = np.array(g.layout(layout='fr')) if coordsin == None else coordsin
+    visual_style = {}
+    visual_style["layout"] = coords
+    visual_style["bbox"] = (960, 960)
+    visual_style["margin"] = 10
+    visual_style['vertex_label'] = labels
+    visual_style['vertex_color'] = 'gray'
+    visual_style['vertex_frame_width'] = 0
+    igraph.plot(g, outpath, **visual_style)
+    return coords
+
+##########################################################
+def plot_graph_adj(adj, coords, labels, outpath):
+    g = igraph.Graph.Weighted_Adjacency(adj, mode='undirected', attr='weight',
+                                        loops=False)
+    coords = plot_graph(g, coords, labels, outpath)
+    return coords
+
+##########################################################
+def threshold_values(coinc, thresh, newval=0):
+    """Values less than or equal to @thresh are set to zero"""
+    coinc[coinc <= thresh] = newval
+    return coinc
+
+##########################################################
+def add_component_vattrib(g, attrib, vlbls, plotpath):
+    vclust = g.components(mode='weak')
+    ncomms = vclust.__len__()
+    igraph.plot(vclust, plotpath, mark_groups=True,
+                palette=igraph.drawing.colors.ClusterColoringPalette(ncomms),
+                # palette=igraph.drawing.colors.ClusterColoringPalette(1),
+                vertex_label=vlbls)
+    info(vclust.summary())
+    g['compid'] = vclust.membership
+    return g
+
 ##########################################################
 def run_experiment(modelstr, h, runid, outdir):
+    expidstr = '{}_{}'.format(modelstr, runid)
+    info(expidstr)
     random.seed(runid); np.random.seed(runid) # Random seed
-    # info(inspect.stack()[0][3] + '()')
 
-    generate_graph(modelstr, outdir)
-    vfeats, lbls = extract_features(adj)
-    coinc, coincpath = get_coincidx_graph(vfeats, .5, True, outdir)
-    plot_motifs(g, coincpath, outdir)
+    coincthresh = .7 # Threshold on the coincidence graph
+    coincexp = 3
 
-    # Extract features
-    # vfeats, labels = extract_hierarchical_feats_all(adj,  h)
-    # vfeats = np.array(vfeats)
-    # for i, l in enumerate(labels):
-        # g.vs[l] = vfeats[:, i]
+    # Output paths
+    op = {
+        'graphorig': pjoin(outdir, '{}_0graphorig.png'.format(expidstr)),
+        'graphcoinc': pjoin(outdir, '{}_1graphcoinc.png'.format(expidstr)),
+        'graphcomm': pjoin(outdir, '{}_2graphcomm.png'.format(expidstr)),
+    }
 
-    # g = vattributes2edges(g, labels, aggreg='sum')
-    # efeats = np.array([g.es[l] for l in labels]).T
+    g, adj = generate_graph(modelstr, outdir)
 
-    # Determine components
+    # vlbls = [str(i) for i in range(g.vcount())]
+    vlbls = None
+
+    coords1 = plot_graph(g, None, vlbls, op['graphorig'])
+
+    vfeats, featlbls = extract_features(adj, h)
+
+    coinc = get_coincidx_values(vfeats, .5, True, coincthresh, coincexp)
+    coords2 = plot_graph_adj(coinc, None, vlbls, op['graphcoinc'])
+    gcoinc = igraph.Graph.Weighted_Adjacency(coinc, mode='undirected')
+    gcoinc = add_component_vattrib(gcoinc, 'compid', vlbls, op['graphcomm'])
+
     # Calculate statistics in each group
     # Plot distributions for each
 
@@ -337,8 +299,6 @@ def main(nprocs, outdir):
             ]
     modelstr = [m.replace('N', str(n)).replace('K', str(k)) for m in modelstr]
 
-
-    from itertools import product
     argsconcat = [x for x in product(modelstr, hs, runids, outdirs)]
     # argsconcat = reversed(argsconcat)
     parallelize(run_experiment, nprocs, argsconcat)
