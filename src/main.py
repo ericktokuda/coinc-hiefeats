@@ -276,29 +276,11 @@ def plot_motifs(gorig, coincpath, outdir):
                 # edge_color=ecolours.tolist())
 
 ##########################################################
-def main(outdir):
+def generate_graph(modelstr, outdir):
+    """Short description """
     info(inspect.stack()[0][3] + '()')
-
-    argsconcat = []
-    for i, f in enumerate(fs):
-        if not is_historical_dump(f): continue
-        argsconcat.append((i, pjoin(dumpdir, f), skipids, debug, outdir))
-
-    argsconcat = argsconcat[startid:]
-    parallelize(process_dump_protected, nprocs, argsconcat)
-
-    # Generate graph
-    # Extract features
-    # Calculate coincidence similarity
-    # Create coinc graph
-    # Determine components
-    # Calculate statistics in each group
-    # Plot distributions for each
-
-    # Generate the graph
     # g = igraph.Graph.Erdos_Renyi(n, p, directed=False, loops=False)
     # breakpoint()
-    random.seed(0); np.random.seed(0)
     # n = 101
     p = 0.05
     h = 2
@@ -307,19 +289,59 @@ def main(outdir):
 
     g = g.connected_components().giant()
     adj = g.get_adjacency_sparse()
-    info('n:{}, m:{}'.format(g.vcount(), g.ecount()))
+    return g, adj
 
-    # Extract features
+##########################################################
+def extract_features(adj):
     vfeats, labels = extract_hierarchical_feats_all(adj,  h)
-    vfeats = np.array(vfeats)
-    for i, l in enumerate(labels):
-        g.vs[l] = vfeats[:, i]
+    return np.array(vfeats), labels
 
-    g = vattributes2edges(g, labels, aggreg='sum')
-    efeats = np.array([g.es[l] for l in labels]).T
-    # coinc, coincpath = get_coincidx_graph(efeats, .5, True, outdir)
+##########################################################
+def run_experiment(modelstr, h, runid, outdir):
+    random.seed(runid); np.random.seed(runid) # Random seed
+    # info(inspect.stack()[0][3] + '()')
+
+    generate_graph(modelstr, outdir)
+    vfeats, lbls = extract_features(adj)
     coinc, coincpath = get_coincidx_graph(vfeats, .5, True, outdir)
     plot_motifs(g, coincpath, outdir)
+
+    # Extract features
+    # vfeats, labels = extract_hierarchical_feats_all(adj,  h)
+    # vfeats = np.array(vfeats)
+    # for i, l in enumerate(labels):
+        # g.vs[l] = vfeats[:, i]
+
+    # g = vattributes2edges(g, labels, aggreg='sum')
+    # efeats = np.array([g.es[l] for l in labels]).T
+
+    # Determine components
+    # Calculate statistics in each group
+    # Plot distributions for each
+
+##########################################################
+def main(nprocs, outdir):
+    info(inspect.stack()[0][3] + '()')
+
+    nruns = 1
+    runids = range(nruns)
+    hs = [2]
+    outdirs = [outdir]
+
+    n = 100
+    k = 6
+    modelstr = [
+            'er,N,K,0',
+            'ba,N,K,0',
+            'gr,N,K,0',
+            ]
+    modelstr = [m.replace('N', str(n)).replace('K', str(k)) for m in modelstr]
+
+
+    from itertools import product
+    argsconcat = [x for x in product(modelstr, hs, runids, outdirs)]
+    # argsconcat = reversed(argsconcat)
+    parallelize(run_experiment, nprocs, argsconcat)
 
 ##########################################################
 if __name__ == "__main__":
