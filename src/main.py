@@ -245,14 +245,58 @@ def add_component_vattrib(g, attrib, vlbls, plotpath):
                 # palette=igraph.drawing.colors.ClusterColoringPalette(1),
                 vertex_label=vlbls)
     info(vclust.summary())
-    g['compid'] = vclust.membership
+    g.vs['compid'] = vclust.membership
     return g
+
+##########################################################
+def get_num_adjacent_groups(g, compid):
+    membs = g.vs['compid']
+    unvisited = set(np.where(np.array(membs) == compid)[0])
+    n = len(unvisited)
+    visited = set() # Visited but not explored
+    explored = set()
+
+    v = unvisited.pop(); visited.add(v)
+    adjgrps = []
+    group = []
+
+    for i in range(1000000):
+        print(i)
+        if len(explored) == n: # All vertices from compid was explored
+            adjgrps.append(group)
+            print(unvisited, visited, explored, adjgrps, len(adjgrps))
+            breakpoint()
+            return adjgrps
+        elif len(visited) == 0: # No more vertices to explore in this group
+            adjgrps.append(group)
+            group = []
+            v = unvisited.pop(); visited.add(v)
+        else:
+            v = visited.pop()
+            neighs = set(g.neighborhood(v))
+            neighs = neighs.intersection(unvisited)
+            unvisited = unvisited.difference(neighs)
+            visited = visited.union(neighs)
+            explored.add(v)
+            group.append(v)
+    raise Exception('Something wrong')
+
+##########################################################
+def get_num_adjacent_groups_all(g):
+    membership = g.vs['compid']
+    nmembs = len(np.unique(membership))
+    nadjgrps = np.zeros(nmembs, dtype=int)
+    for compid in range(nmembs):
+        adjgrps = get_num_adjacent_groups(g, compid)
+        nadjgrps[compid] = len(adjgrps)
+    return nadjgrps
 
 ##########################################################
 def run_experiment(modelstr, h, runid, outdir):
     expidstr = '{}_{}'.format(modelstr, runid)
     info(expidstr)
     random.seed(runid); np.random.seed(runid) # Random seed
+    # random.seed(); np.random.seed(runid) # TODO: uncomment line above
 
     coincthresh = .7 # Threshold on the coincidence graph
     coincexp = 3
@@ -277,8 +321,11 @@ def run_experiment(modelstr, h, runid, outdir):
     coords2 = plot_graph_adj(coinc, None, vlbls, op['graphcoinc'])
     gcoinc = igraph.Graph.Weighted_Adjacency(coinc, mode='undirected')
     gcoinc = add_component_vattrib(gcoinc, 'compid', vlbls, op['graphcomm'])
+    # compids, compszs = np.unique(gcoinc.vs['compid'], return_counts=True)
+    nadjgrps = get_num_adjacent_groups_all(gcoinc)
 
     # Calculate statistics in each group
+    
     # Plot distributions for each
 
 ##########################################################
@@ -294,9 +341,10 @@ def main(nprocs, outdir):
     k = 6
     modelstr = [
             'er,N,K,0',
-            'ba,N,K,0',
-            'gr,N,K,0',
-            ]
+    ]
+            # 'ba,N,K,0',
+            # 'gr,N,K,0',
+            # ]
     modelstr = [m.replace('N', str(n)).replace('K', str(k)) for m in modelstr]
 
     argsconcat = [x for x in product(modelstr, hs, runids, outdirs)]
