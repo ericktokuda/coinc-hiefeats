@@ -212,7 +212,7 @@ def get_rgg_params(nvertices, avgdegree):
 
 ##########################################################
 def plot_graph(g, coordsin, labels, outpath):
-    coords = np.array(g.layout(layout='fr')) if coordsin == None else coordsin
+    coords = np.array(g.layout(layout='fr')) if coordsin is None else coordsin
     visual_style = {}
     visual_style["layout"] = coords
     visual_style["bbox"] = (960, 960)
@@ -237,15 +237,25 @@ def threshold_values(coinc, thresh, newval=0):
     return coinc
 
 ##########################################################
-def add_component_vattrib(g, attrib, vlbls, plotpath):
+def label_communities(g, attrib, vlbls, plotpath):
     vclust = g.components(mode='weak')
     ncomms = vclust.__len__()
-    igraph.plot(vclust, plotpath, mark_groups=True,
-                palette=igraph.drawing.colors.ClusterColoringPalette(ncomms),
-                # palette=igraph.drawing.colors.ClusterColoringPalette(1),
-                vertex_label=vlbls)
-    info(vclust.summary())
     g.vs['compid'] = vclust.membership
+
+    membstr = [str(x) for x in g.vs['compid']]
+    _ = plot_graph(g, None, membstr, plotpath)
+    # igraph.plot(vclust, plotpath, mark_groups=True,
+                # palette=igraph.drawing.colors.ClusterColoringPalette(ncomms),
+                # palette=igraph.drawing.colors.ClusterColoringPalette(1),
+                # vertex_label=vlbls)
+    info(vclust.summary())
+
+    # TODO: remove lines below
+    memb = np.array(vclust.membership)
+    commszs = vclust.sizes()
+    maxid = np.argmax(commszs)
+    memb[memb != maxid] = -1
+    g.vs['compid'] = memb
     return g
 
 ##########################################################
@@ -285,8 +295,13 @@ def get_num_adjacent_groups(g, compid):
 def get_num_adjacent_groups_all(g):
     membership = g.vs['compid']
     nmembs = len(np.unique(membership))
+    # TODO: remove this
+    z = list(np.unique(membership))
+    z.remove(-1)
+    
     nadjgrps = np.zeros(nmembs, dtype=int)
-    for compid in range(nmembs):
+    # for compid in range(nmembs):
+    for compid in z: # TODO: remove this
         adjgrps = get_num_adjacent_groups(g, compid)
         nadjgrps[compid] = len(adjgrps)
     return nadjgrps
@@ -295,8 +310,8 @@ def get_num_adjacent_groups_all(g):
 def run_experiment(modelstr, h, runid, outdir):
     expidstr = '{}_{}'.format(modelstr, runid)
     info(expidstr)
-    random.seed(runid); np.random.seed(runid) # Random seed
-    # random.seed(); np.random.seed(runid) # TODO: uncomment line above
+    # random.seed(runid); np.random.seed(runid) # Random seed
+    # random.seed(1); np.random.seed(runid) # TODO: uncomment line above
 
     coincthresh = .7 # Threshold on the coincidence graph
     coincexp = 3
@@ -305,13 +320,13 @@ def run_experiment(modelstr, h, runid, outdir):
     op = {
         'graphorig': pjoin(outdir, '{}_0graphorig.png'.format(expidstr)),
         'graphcoinc': pjoin(outdir, '{}_1graphcoinc.png'.format(expidstr)),
-        'graphcomm': pjoin(outdir, '{}_2graphcomm.png'.format(expidstr)),
     }
 
     g, adj = generate_graph(modelstr, outdir)
+    n = g.vcount()
 
-    # vlbls = [str(i) for i in range(g.vcount())]
-    vlbls = None
+    vlbls = [str(i) for i in range(g.vcount())]
+    # vlbls = None
 
     coords1 = plot_graph(g, None, vlbls, op['graphorig'])
 
@@ -320,9 +335,12 @@ def run_experiment(modelstr, h, runid, outdir):
     coinc = get_coincidx_values(vfeats, .5, True, coincthresh, coincexp)
     coords2 = plot_graph_adj(coinc, None, vlbls, op['graphcoinc'])
     gcoinc = igraph.Graph.Weighted_Adjacency(coinc, mode='undirected')
-    gcoinc = add_component_vattrib(gcoinc, 'compid', vlbls, op['graphcomm'])
+    gcoinc = label_communities(gcoinc, 'compid', vlbls, op['graphcoinc'])
     # compids, compszs = np.unique(gcoinc.vs['compid'], return_counts=True)
-    nadjgrps = get_num_adjacent_groups_all(gcoinc)
+    g.vs['compid'] = gcoinc.vs['compid']
+    membstr = [str(x) for x in g.vs['compid']]
+    _ = plot_graph(g, coords1, membstr, op['graphorig'])
+    nadjgrps = get_num_adjacent_groups_all(g)
 
     # Calculate statistics in each group
     
@@ -337,11 +355,12 @@ def main(nprocs, outdir):
     hs = [2]
     outdirs = [outdir]
 
-    n = 100
+    n = 50
     k = 6
     modelstr = [
-            'er,N,K,0',
+            'gr,N,K,0',
     ]
+            # 'er,N,K,0',
             # 'ba,N,K,0',
             # 'gr,N,K,0',
             # ]
