@@ -244,18 +244,8 @@ def label_communities(g, attrib, vlbls, plotpath):
 
     membstr = [str(x) for x in g.vs['compid']]
     _ = plot_graph(g, None, membstr, plotpath)
-    # igraph.plot(vclust, plotpath, mark_groups=True,
-                # palette=igraph.drawing.colors.ClusterColoringPalette(ncomms),
-                # palette=igraph.drawing.colors.ClusterColoringPalette(1),
-                # vertex_label=vlbls)
     info(vclust.summary())
 
-    # TODO: remove lines below
-    memb = np.array(vclust.membership)
-    commszs = vclust.sizes()
-    maxid = np.argmax(commszs)
-    memb[memb != maxid] = -1
-    g.vs['compid'] = memb
     return g
 
 ##########################################################
@@ -271,12 +261,11 @@ def get_num_adjacent_groups(g, compid):
     group = []
 
     for i in range(1000000):
-        print(i)
         if len(explored) == n: # All vertices from compid was explored
             adjgrps.append(group)
-            print(unvisited, visited, explored, adjgrps, len(adjgrps))
-            breakpoint()
-            return adjgrps
+            # print(unvisited, visited, explored, adjgrps, len(adjgrps))
+            # breakpoint()
+            return n, adjgrps
         elif len(visited) == 0: # No more vertices to explore in this group
             adjgrps.append(group)
             group = []
@@ -295,26 +284,21 @@ def get_num_adjacent_groups(g, compid):
 def get_num_adjacent_groups_all(g):
     membership = g.vs['compid']
     nmembs = len(np.unique(membership))
-    # TODO: remove this
-    z = list(np.unique(membership))
-    z.remove(-1)
-    
-    nadjgrps = np.zeros(nmembs, dtype=int)
-    # for compid in range(nmembs):
-    for compid in z: # TODO: remove this
-        adjgrps = get_num_adjacent_groups(g, compid)
-        nadjgrps[compid] = len(adjgrps)
+
+    nadjgrps = np.zeros((nmembs, 2), dtype=int)
+    for compid in range(nmembs):
+        compsz, adjgrps = get_num_adjacent_groups(g, compid)
+        nadjgrps[compid] = [compsz, len(adjgrps)]
     return nadjgrps
 
 ##########################################################
 def run_experiment(modelstr, h, runid, outdir):
     expidstr = '{}_{}'.format(modelstr, runid)
     info(expidstr)
-    # random.seed(runid); np.random.seed(runid) # Random seed
-    # random.seed(1); np.random.seed(runid) # TODO: uncomment line above
+    random.seed(runid); np.random.seed(runid) # Random seed
 
-    coincthresh = .7 # Threshold on the coincidence graph
-    coincexp = 3
+    coincthresh = .5 # Threshold on the coincidence graph
+    coincexp = 2
 
     # Output paths
     op = {
@@ -339,8 +323,10 @@ def run_experiment(modelstr, h, runid, outdir):
     # compids, compszs = np.unique(gcoinc.vs['compid'], return_counts=True)
     g.vs['compid'] = gcoinc.vs['compid']
     membstr = [str(x) for x in g.vs['compid']]
+
     _ = plot_graph(g, coords1, membstr, op['graphorig'])
-    nadjgrps = get_num_adjacent_groups_all(g)
+    feats = get_num_adjacent_groups_all(g)
+    return feats
 
     # Calculate statistics in each group
     
@@ -358,17 +344,22 @@ def main(nprocs, outdir):
     n = 50
     k = 6
     modelstr = [
-            'gr,N,K,0',
-    ]
-            # 'er,N,K,0',
-            # 'ba,N,K,0',
             # 'gr,N,K,0',
-            # ]
+    # ]
+            'er,N,K,0',
+            'ba,N,K,0',
+            'gr,N,K,0',
+            ]
     modelstr = [m.replace('N', str(n)).replace('K', str(k)) for m in modelstr]
 
     argsconcat = [x for x in product(modelstr, hs, runids, outdirs)]
     # argsconcat = reversed(argsconcat)
-    parallelize(run_experiment, nprocs, argsconcat)
+    feats = parallelize(run_experiment, nprocs, argsconcat)
+
+    # for args_ in argsconcat:
+        # modelstr = args_.split(',')[0]
+    breakpoint()
+    
 
 ##########################################################
 if __name__ == "__main__":
