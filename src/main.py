@@ -20,6 +20,7 @@ from sklearn.preprocessing import StandardScaler
 from itertools import product, combinations
 from myutils import parallelize
 
+CID = 'compid'
 ##########################################################
 def interiority(dataorig):
     """Calculate the interiority index of the two rows. @vs has 2rows and n-columns, where
@@ -52,9 +53,9 @@ def coincidence(data, a):
     return inter * jac
 
 ##########################################################
-def get_coincidx_values(dataorig, alpha, standardize, t, d):
+def get_coincidx_values(dataorig, alpha, standardize):
     """Get coincidence value between each combination in @dataorig"""
-    info(inspect.stack()[0][3] + '()')
+    # info(inspect.stack()[0][3] + '()')
     n, m = dataorig.shape
     if standardize:
         data = StandardScaler().fit_transform(dataorig)
@@ -67,8 +68,6 @@ def get_coincidx_values(dataorig, alpha, standardize, t, d):
         c = coincidence(data2, alpha)
         adj[comb[0], comb[1]] = adj[comb[1], comb[0]] = c
 
-    adj = threshold_values(adj, t)
-    adj = np.power(adj, d)
     return adj
 
 ##########################################################
@@ -126,6 +125,8 @@ def calculate_hierclucoeff(he, hn):
 
 ##########################################################
 def calculate_hieconvratio(hd, hnnxt):
+    #TODO: define what to do when hn = 0
+    if hnnxt == 0: return 0
     return hd / hnnxt
 
 ##########################################################
@@ -142,7 +143,7 @@ def extract_hirarchical_feats(adj, v, h):
 
 ##########################################################
 def extract_hierarchical_feats_all(adj,  h):
-    info(inspect.stack()[0][3] + '()')
+    # info(inspect.stack()[0][3] + '()')
     labels = 'hn he hd hc cr'.split(' ')
     feats = []
     for v in range(adj.shape[0]):
@@ -164,8 +165,7 @@ def vattributes2edges(g, attribs, aggreg='sum'):
 ##########################################################
 def generate_graph(modelstr, outdir):
     """Generate an undirected graph according to @modelstr. It should be MODEL,N,PARAM"""
-    info(inspect.stack()[0][3] + '()')
-
+    # info(inspect.stack()[0][3] + '()')
     parsed = modelstr.split(',')
     model = parsed[0];
     n = int(parsed[1])
@@ -185,6 +185,8 @@ def generate_graph(modelstr, outdir):
 
     g.to_undirected()
     g = g.connected_components().giant()
+    g.simplify()
+
     gpath = pjoin(outdir, 'graph.png')
     coords = g.layout(layout='fr')
     return g, g.get_adjacency_sparse()
@@ -211,23 +213,24 @@ def get_rgg_params(nvertices, avgdegree):
     return r
 
 ##########################################################
-def plot_graph(g, coordsin, labels, outpath):
+def plot_graph(g, coordsin, labels, vsizes, outpath):
     coords = np.array(g.layout(layout='fr')) if coordsin is None else coordsin
     visual_style = {}
     visual_style["layout"] = coords
     visual_style["bbox"] = (960, 960)
     visual_style["margin"] = 10
     visual_style['vertex_label'] = labels
-    visual_style['vertex_color'] = 'gray'
+    visual_style['vertex_color'] = 'blue'
+    visual_style['vertex_size'] = vsizes
     visual_style['vertex_frame_width'] = 0
     igraph.plot(g, outpath, **visual_style)
     return coords
 
 ##########################################################
-def plot_graph_adj(adj, coords, labels, outpath):
+def plot_graph_adj(adj, coords, labels, vsizes, outpath):
     g = igraph.Graph.Weighted_Adjacency(adj, mode='undirected', attr='weight',
                                         loops=False)
-    coords = plot_graph(g, coords, labels, outpath)
+    coords = plot_graph(g, coords, labels, vsizes, outpath)
     return coords
 
 ##########################################################
@@ -237,20 +240,20 @@ def threshold_values(coinc, thresh, newval=0):
     return coinc
 
 ##########################################################
-def label_communities(g, attrib, vlbls, plotpath):
+def label_communities(g, attrib, vszs, plotpath):
     vclust = g.components(mode='weak')
     ncomms = vclust.__len__()
-    g.vs['compid'] = vclust.membership
+    g.vs[CID] = vclust.membership
 
-    membstr = [str(x) for x in g.vs['compid']]
-    _ = plot_graph(g, None, membstr, plotpath)
-    info(vclust.summary())
+    membstr = [str(x) for x in g.vs[CID]]
+    _ = plot_graph(g, None, None, vszs, plotpath)
+    # info(vclust.summary())
 
     return g
 
 ##########################################################
 def get_num_adjacent_groups(g, compid):
-    membs = g.vs['compid']
+    membs = g.vs[CID]
     unvisited = set(np.where(np.array(membs) == compid)[0])
     n = len(unvisited)
     visited = set() # Visited but not explored
@@ -263,8 +266,6 @@ def get_num_adjacent_groups(g, compid):
     for i in range(1000000):
         if len(explored) == n: # All vertices from compid was explored
             adjgrps.append(group)
-            # print(unvisited, visited, explored, adjgrps, len(adjgrps))
-            # breakpoint()
             return n, adjgrps
         elif len(visited) == 0: # No more vertices to explore in this group
             adjgrps.append(group)
@@ -282,7 +283,7 @@ def get_num_adjacent_groups(g, compid):
 
 ##########################################################
 def get_num_adjacent_groups_all(g):
-    membership = g.vs['compid']
+    membership = g.vs[CID]
     nmembs = len(np.unique(membership))
 
     nadjgrps = np.zeros((nmembs, 2), dtype=int)
@@ -292,15 +293,37 @@ def get_num_adjacent_groups_all(g):
     return nadjgrps
 
 ##########################################################
+def get_feats_from_components(g):
+    membs = np.array(g.vs[CID])
+    comps, compszs = np.unique(membs, return_counts=True)
+    ncomps = len(comps)
+    feats = []
+
+    data = []
+    for compid in comps:
+        vs = g.vs.select(compid_eq=compid)
+        sz = len(vs)
+        degs = vs.degree()
+        # data.append([sz, np.mean(degs), np.std(degs)])
+        data.append([sz, np.mean(degs)])
+
+    # feats = [ncomps, np.array(data).mean(axis=0), np.array(data).std(axis=0)
+    feats = [ncomps]
+    means = np.array(data).mean(axis=0)
+    stds = np.array(data).std(axis=0)
+    feats.extend([means[0], stds[0], means[1], stds[1]])
+    return feats
+
+##########################################################
 def run_experiment(modelstr, h, runid, outdir):
     expidstr = '{}_{}'.format(modelstr, runid)
     info(expidstr)
     random.seed(runid); np.random.seed(runid) # Random seed
 
-    coincthresh = .5 # Threshold on the coincidence graph
-    coincexp = 2
+    t = 0.65
+    # t = 0.4
+    coincexp = 3
 
-    # Output paths
     op = {
         'graphorig': pjoin(outdir, '{}_0graphorig.png'.format(expidstr)),
         'graphcoinc': pjoin(outdir, '{}_1graphcoinc.png'.format(expidstr)),
@@ -308,58 +331,89 @@ def run_experiment(modelstr, h, runid, outdir):
 
     g, adj = generate_graph(modelstr, outdir)
     n = g.vcount()
+    vszs = np.array(g.degree()) + 1 # In case it is zero
 
-    vlbls = [str(i) for i in range(g.vcount())]
-    # vlbls = None
+    # vlbls = [str(i) for i in range(g.vcount())]
+    vlbls = None
 
-    coords1 = plot_graph(g, None, vlbls, op['graphorig'])
-
+    coords1 = plot_graph(g, None, vlbls, vszs, op['graphorig']) # It is going to be overwriten
     vfeats, featlbls = extract_features(adj, h)
+    coinc = get_coincidx_values(vfeats, .5, True)
+    coinc = np.power(coinc, coincexp)
 
-    coinc = get_coincidx_values(vfeats, .5, True, coincthresh, coincexp)
-    coords2 = plot_graph_adj(coinc, None, vlbls, op['graphcoinc'])
+    coinc = threshold_values(coinc, t)
+
+    coords2 = plot_graph_adj(coinc, None, vlbls, vszs, op['graphcoinc'])
     gcoinc = igraph.Graph.Weighted_Adjacency(coinc, mode='undirected')
-    gcoinc = label_communities(gcoinc, 'compid', vlbls, op['graphcoinc'])
-    # compids, compszs = np.unique(gcoinc.vs['compid'], return_counts=True)
-    g.vs['compid'] = gcoinc.vs['compid']
-    membstr = [str(x) for x in g.vs['compid']]
+    gcoinc = label_communities(gcoinc, CID, vszs, op['graphcoinc'])
 
-    _ = plot_graph(g, coords1, membstr, op['graphorig'])
-    feats = get_num_adjacent_groups_all(g)
+    g.vs[CID] = gcoinc.vs[CID]
+    membstr = [str(x) for x in g.vs[CID]]
+
+    _ = plot_graph(g, coords1, vlbls, vszs, op['graphorig'])
+    # feats = get_num_adjacent_groups_all(g)
+    feats = [n]
+    feats.extend(get_feats_from_components(gcoinc))
     return feats
 
-    # Calculate statistics in each group
-    
-    # Plot distributions for each
+##########################################################
+def run_experiments_all(modelstr, hs, runids, nprocs, outdir):
+    info(inspect.stack()[0][3] + '()')
+    outpath = pjoin(outdir, 'res.csv')
+    if os.path.isfile(outpath): return pd.read_csv(outpath)
+    argsconcat = [x for x in product(modelstr, hs, runids, [outdir])]
+    # argsconcat = reversed(argsconcat)
+
+    featsall = parallelize(run_experiment, nprocs, argsconcat)
+
+    featsall = np.array(featsall, dtype=object)
+    params1 = np.array([x[0].split(',') for x in argsconcat], dtype=object)
+    params2 = np.array([x[1] for x in argsconcat], dtype=object).reshape(-1, 1)
+    featsall = np.column_stack((params1, params2, featsall))
+    cols = ['model', 'nreq', 'k', 'x', 'runid', 'nreal', 'ncomps',
+            'szmean', 'szstd', 'degmeanmean', 'degmeanstd']
+    df = pd.DataFrame(featsall, columns=cols)
+    df.to_csv(outpath, index=False)
+    return df
+
+##########################################################
+def plot_results(df, outdir):
+    info(inspect.stack()[0][3] + '()')
+    plotdir = pjoin(outdir, 'plots')
+    os.makedirs(plotdir, exist_ok=True)
+    feats = ['ncomps', 'szmean', 'szstd', 'degmeanmean', 'degmeanstd']
+    models = ['er', 'gr', 'ba']
+    for feat in feats:
+        plotpath = pjoin(plotdir, feat + '.png')
+        fig, ax = plt.subplots()
+        for model in models:
+            df.loc[df.model == model][feat].plot.kde(ax=ax, label=model, legend=True)
+        ax.set_ylabel('')
+        ax.set_xlabel(feat[0].upper() + feat[1:])
+        plt.savefig(plotpath)
+        plt.close()
 
 ##########################################################
 def main(nprocs, outdir):
     info(inspect.stack()[0][3] + '()')
 
-    nruns = 1
+    nruns = 100
     runids = range(nruns)
     hs = [2]
-    outdirs = [outdir]
 
-    n = 50
+    n = 400
     k = 6
+    # n = 50
+    # k = 6
     modelstr = [
-            # 'gr,N,K,0',
-    # ]
             'er,N,K,0',
-            'ba,N,K,0',
             'gr,N,K,0',
+            'ba,N,K,0',
             ]
     modelstr = [m.replace('N', str(n)).replace('K', str(k)) for m in modelstr]
 
-    argsconcat = [x for x in product(modelstr, hs, runids, outdirs)]
-    # argsconcat = reversed(argsconcat)
-    feats = parallelize(run_experiment, nprocs, argsconcat)
-
-    # for args_ in argsconcat:
-        # modelstr = args_.split(',')[0]
-    breakpoint()
-    
+    df = run_experiments_all(modelstr, hs, runids, nprocs, outdir)
+    plot_results(df, outdir)
 
 ##########################################################
 if __name__ == "__main__":
