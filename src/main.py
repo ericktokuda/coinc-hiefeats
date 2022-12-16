@@ -293,7 +293,7 @@ def get_num_adjacent_groups_all(g):
     return nadjgrps
 
 ##########################################################
-def get_feats_from_components(g):
+def get_feats_from_components(g, minszcomp):
     membs = np.array(g.vs[CID])
     comps, compszs = np.unique(membs, return_counts=True)
     ncomps = len(comps)
@@ -302,6 +302,7 @@ def get_feats_from_components(g):
     data = []
     for compid in comps:
         vs = g.vs.select(compid_eq=compid)
+        if len(vs) <= minszcomp: continue
         sz = len(vs)
         degs = vs.degree()
         # data.append([sz, np.mean(degs), np.std(degs)])
@@ -323,6 +324,7 @@ def run_experiment(modelstr, h, runid, outdir):
     t = 0.65
     # t = 0.4
     coincexp = 3
+    minszcomp = 1
 
     op = {
         'graphorig': pjoin(outdir, '{}_0graphorig.png'.format(expidstr)),
@@ -366,9 +368,9 @@ def run_experiments_all(modelstr, hs, runids, nprocs, outdir):
 
     featsall = parallelize(run_experiment, nprocs, argsconcat)
 
-    featsall = np.array(featsall, dtype=object)
     params1 = np.array([x[0].split(',') for x in argsconcat], dtype=object)
     params2 = np.array([x[1] for x in argsconcat], dtype=object).reshape(-1, 1)
+    featsall = np.array(featsall, dtype=object)
     featsall = np.column_stack((params1, params2, featsall))
     cols = ['model', 'nreq', 'k', 'x', 'runid', 'nreal', 'ncomps',
             'szmean', 'szstd', 'degmeanmean', 'degmeanstd']
