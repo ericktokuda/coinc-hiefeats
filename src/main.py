@@ -299,20 +299,26 @@ def get_feats_from_components(g, mincompsz):
     ncomps = len(comps)
     feats = []
 
-    data = []
+    aux = []
     for compid in comps:
         vs = g.vs.select(compid_eq=compid)
         if len(vs) <= mincompsz: continue
         sz = len(vs)
         degs = vs.degree()
-        # data.append([sz, np.mean(degs), np.std(degs)])
-        data.append([sz, np.mean(degs)])
+        # aux.append([sz, np.mean(degs), np.std(degs)])
+        aux.append([sz, np.mean(degs)])
 
-    # feats = [ncomps, np.array(data).mean(axis=0), np.array(data).std(axis=0)
-    feats = [ncomps]
-    means = np.array(data).mean(axis=0)
-    stds = np.array(data).std(axis=0)
-    feats.extend([means[0], stds[0], means[1], stds[1]])
+    aux = np.array(aux)
+    ws = aux[:, 0] / np.sum(aux[:, 0])
+    # data = np.column_stack((aux, aux[:, 0] * aux[:, 1]))
+    aux2 = aux[:, 1] * ws
+    data = np.column_stack((aux, aux2))
+
+    feats = [len(data)]
+
+    means = data.mean(axis=0)
+    stds = data.std(axis=0)
+    feats.extend([means[0], stds[0], means[1], stds[1], means[2], stds[2]])
     return feats
 
 ##########################################################
@@ -373,7 +379,7 @@ def run_experiments_all(modelstr, hs, runids, nprocs, outdir):
     featsall = np.array(featsall, dtype=object)
     featsall = np.column_stack((params1, params2, featsall))
     cols = ['model', 'nreq', 'k', 'x', 'runid', 'nreal', 'ncomps',
-            'szmean', 'szstd', 'degmeanmean', 'degmeanstd']
+            'szmean', 'szstd', 'degmeanmean', 'degmeanstd', 'degwmeanmean', 'degwmeanstd']
     df = pd.DataFrame(featsall, columns=cols)
     df.to_csv(outpath, index=False)
     return df
@@ -383,12 +389,13 @@ def plot_results(df, outdir):
     info(inspect.stack()[0][3] + '()')
     plotdir = pjoin(outdir, 'plots')
     os.makedirs(plotdir, exist_ok=True)
-    feats = ['ncomps', 'szmean', 'szstd', 'degmeanmean', 'degmeanstd']
+    feats = ['ncomps', 'szmean', 'szstd', 'degwmeanmean', 'degwmeanstd']
     models = ['er', 'gr', 'ba']
     for feat in feats:
         plotpath = pjoin(plotdir, feat + '.png')
         fig, ax = plt.subplots()
         for model in models:
+            z = df.loc[df.model == model][feat]
             df.loc[df.model == model][feat].plot.kde(ax=ax, label=model, legend=True)
         ax.set_ylabel('')
         ax.set_xlabel(feat[0].upper() + feat[1:])
@@ -396,10 +403,9 @@ def plot_results(df, outdir):
         plt.close()
 
 ##########################################################
-def main(nprocs, outdir):
+def main(nruns, nprocs, outdir):
     info(inspect.stack()[0][3] + '()')
 
-    nruns = 100
     runids = range(nruns)
     hs = [2]
 
@@ -430,6 +436,6 @@ if __name__ == "__main__":
 
     os.makedirs(args.outdir, exist_ok=True)
     readmepath = create_readme(sys.argv, args.outdir)
-    main(args.nprocs, args.outdir)
+    main(args.nruns, args.nprocs, args.outdir)
     info('Elapsed time:{:.02f}s'.format(time.time()-t0))
     info('Output generated in {}'.format(args.outdir))
