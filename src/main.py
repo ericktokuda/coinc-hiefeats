@@ -330,7 +330,7 @@ def run_experiment(modelstr, h, runid, outdir):
     t = 0.65
     # t = 0.4
     coincexp = 3
-    mincompsz = 1
+    mincompsz = 4
 
     op = {
         'graphorig': pjoin(outdir, '{}_0graphorig.png'.format(expidstr)),
@@ -389,7 +389,8 @@ def plot_results(df, outdir):
     info(inspect.stack()[0][3] + '()')
     plotdir = pjoin(outdir, 'plots')
     os.makedirs(plotdir, exist_ok=True)
-    feats = ['ncomps', 'szmean', 'szstd', 'degwmeanmean', 'degwmeanstd']
+    feats = ['ncomps', 'szmean', 'szstd', 'degmeanmean', 'degmeanstd',
+             'degwmeanmean', 'degwmeanstd']
     models = ['er', 'gr', 'ba']
     for feat in feats:
         plotpath = pjoin(plotdir, feat + '.png')
