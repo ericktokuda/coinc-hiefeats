@@ -227,6 +227,39 @@ def plot_graph(g, coordsin, labels, vsizes, outpath):
     return coords
 
 ##########################################################
+def plot_graph2(g, coordsin, labels, vsizes, mincompsz, outpath):
+    coords = np.array(g.layout(layout='fr')) if coordsin is None else coordsin
+
+    membs = np.array(g.vs[CID])
+    comps, compszs = np.unique(membs, return_counts=True)
+    vcolours = np.array(['#D9D9D9FF'] * g.vcount())
+    usedvs = np.where(np.isin(membs, np.where(compszs > mincompsz)[0]))
+    vcolours[usedvs] = '#FF0000FF'
+
+    labels = np.array([''] * g.vcount(), dtype=object)
+    ##########################################################
+    for compid in comps:
+        vs = g.vs.select(compid_eq=compid)
+        if len(vs) <= mincompsz: continue
+        sz = len(vs)
+        degs = vs.degree()
+        labels[vs.indices[0]] = '{:.02f}'.format(np.mean(degs))
+    ##########################################################
+
+    visual_style = {}
+    visual_style["layout"] = coords
+    visual_style["bbox"] = (1960, 1960)
+    visual_style["margin"] = 10
+    visual_style['vertex_label'] = labels
+    # visual_style['vertex_color'] = 'blue'
+    visual_style['vertex_color'] = vcolours
+    visual_style['vertex_size'] = vsizes
+    visual_style['vertex_frame_width'] = 0
+    igraph.plot(g, outpath, **visual_style)
+    igraph.plot(g, outpath.replace('.png', '.pdf'), **visual_style)
+    return coords
+
+##########################################################
 def plot_graph_adj(adj, coords, labels, vsizes, outpath):
     g = igraph.Graph.Weighted_Adjacency(adj, mode='undirected', attr='weight',
                                         loops=False)
@@ -354,6 +387,7 @@ def run_experiment(modelstr, h, runid, outdir):
     coords2 = plot_graph_adj(coinc, None, vlbls, vszs, op['graphcoinc'])
     gcoinc = igraph.Graph.Weighted_Adjacency(coinc, mode='undirected')
     gcoinc = label_communities(gcoinc, CID, vszs, op['graphcoinc'])
+    # _ = plot_graph2(gcoinc, None, None, vszs, mincompsz, op['graphcoinc']) # Overwrite
 
     g.vs[CID] = gcoinc.vs[CID]
     membstr = [str(x) for x in g.vs[CID]]
@@ -375,7 +409,7 @@ def run_experiments_all(modelstr, hs, runids, nprocs, outdir):
     featsall = parallelize(run_experiment, nprocs, argsconcat)
 
     params1 = np.array([x[0].split(',') for x in argsconcat], dtype=object)
-    params2 = np.array([x[1] for x in argsconcat], dtype=object).reshape(-1, 1)
+    params2 = np.array([x[2] for x in argsconcat], dtype=object).reshape(-1, 1)
     featsall = np.array(featsall, dtype=object)
     featsall = np.column_stack((params1, params2, featsall))
     cols = ['model', 'nreq', 'k', 'x', 'runid', 'nreal', 'ncomps',
