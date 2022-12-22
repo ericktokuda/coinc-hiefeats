@@ -335,23 +335,31 @@ def get_feats_from_components(g, mincompsz):
     aux = []
     for compid in comps:
         vs = g.vs.select(compid_eq=compid)
-        if len(vs) <= mincompsz: continue
         sz = len(vs)
+        if sz <= mincompsz: continue
         degs = vs.degree()
-        # aux.append([sz, np.mean(degs), np.std(degs)])
-        aux.append([sz, np.mean(degs)])
+
+        gcomp = g.induced_subgraph(vs)
+
+        dists = np.array(gcomp.distances())
+        mpl = np.sum(dists) / (sz * sz - sz)
+
+        clucoeff = gcomp.transitivity_avglocal_undirected()
+        aux.append([sz, np.mean(degs), np.std(degs), mpl, clucoeff])
 
     aux = np.array(aux)
     ws = aux[:, 0] / np.sum(aux[:, 0])
-    # data = np.column_stack((aux, aux[:, 0] * aux[:, 1]))
     aux2 = aux[:, 1] * ws
     data = np.column_stack((aux, aux2))
 
-    feats = [len(data)]
 
     means = data.mean(axis=0)
     stds = data.std(axis=0)
-    feats.extend([means[0], stds[0], means[1], stds[1], means[2], stds[2]])
+
+    feats = [len(data), np.max(data[:, 0])]
+    for i in range(data.shape[1]):
+        feats.extend([means[i], stds[i]])
+
     return feats
 
 ##########################################################
@@ -361,9 +369,10 @@ def run_experiment(modelstr, h, runid, outdir):
     random.seed(runid); np.random.seed(runid) # Random seed
 
     t = 0.65
-    # t = 0.4
-    coincexp = 3
     mincompsz = 4
+    coincexp = 3
+    # t = 0.4 #TODO: debug
+    # mincompsz = 2 # TODO: debug
 
     op = {
         'graphorig': pjoin(outdir, '{}_0graphorig.png'.format(expidstr)),
@@ -412,8 +421,10 @@ def run_experiments_all(modelstr, hs, runids, nprocs, outdir):
     params2 = np.array([x[2] for x in argsconcat], dtype=object).reshape(-1, 1)
     featsall = np.array(featsall, dtype=object)
     featsall = np.column_stack((params1, params2, featsall))
-    cols = ['model', 'nreq', 'k', 'x', 'runid', 'nreal', 'ncomps',
-            'szmean', 'szstd', 'degmeanmean', 'degmeanstd', 'degwmeanmean', 'degwmeanstd']
+    cols = ['model', 'nreq', 'k', 'x', 'runid', 'nreal', 'ncomps', 'szmax',
+            'szmean', 'szstd', 'degmeanmean', 'degmeanstd',
+            'degstdmean', 'degstdstd', 'degmeanwmean', 'degmeanwstd',
+            'mplmean', 'mplstd', 'transmean', 'transstd']
     df = pd.DataFrame(featsall, columns=cols)
     df.to_csv(outpath, index=False)
     return df
@@ -423,8 +434,9 @@ def plot_results(df, outdir):
     info(inspect.stack()[0][3] + '()')
     plotdir = pjoin(outdir, 'plots')
     os.makedirs(plotdir, exist_ok=True)
-    feats = ['ncomps', 'szmean', 'szstd', 'degmeanmean', 'degmeanstd',
-             'degwmeanmean', 'degwmeanstd']
+    feats = ['ncomps', 'szmax', 'szmean', 'szstd', 'degmeanmean', 'degmeanstd',
+             'degstdmean', 'degstdstd', 'mplmean', 'mplstd',
+             'transmean', 'transstd']
     models = ['er', 'gr', 'ba']
     for feat in feats:
         plotpath = pjoin(plotdir, feat + '.png')
@@ -446,7 +458,7 @@ def main(nruns, nprocs, outdir):
 
     n = 400
     k = 6
-    # n = 50
+    # n = 50 # TODO: debug
     # k = 6
     modelstr = [
             'er,N,K,0',
@@ -463,7 +475,7 @@ if __name__ == "__main__":
     info(datetime.date.today())
     t0 = time.time()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--nruns', default=1, type=int,
+    parser.add_argument('--nruns', default=2, type=int,
                         help='Number of runs for each experiment')
     parser.add_argument('--nprocs', default=1, type=int, help='Number of procs')
     parser.add_argument('--outdir', default='/tmp/out/', help='Output directory')
