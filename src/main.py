@@ -20,6 +20,7 @@ from sklearn.preprocessing import StandardScaler
 from itertools import product, combinations
 from myutils import parallelize
 import json
+import shutil
 
 CID = 'compid'
 ##########################################################
@@ -483,6 +484,7 @@ if __name__ == "__main__":
 
     os.makedirs(args.outdir, exist_ok=True)
     readmepath = create_readme(sys.argv, args.outdir)
+    shutil.copy(args.config, args.outdir)
     main(args.config, args.nprocs, args.outdir)
     info('Elapsed time:{:.02f}s'.format(time.time()-t0))
     info('Output generated in {}'.format(args.outdir))
