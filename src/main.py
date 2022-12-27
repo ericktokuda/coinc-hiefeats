@@ -330,6 +330,7 @@ def get_num_adjacent_groups_all(g):
 
 ##########################################################
 def get_feats_from_components(g, mincompsz):
+    FEATLEN = 14
     membs = np.array(g.vs[CID])
     comps, compszs = np.unique(membs, return_counts=True)
     ncomps = len(comps)
@@ -349,6 +350,9 @@ def get_feats_from_components(g, mincompsz):
 
         clucoeff = gcomp.transitivity_avglocal_undirected()
         aux.append([sz, np.mean(degs), np.std(degs), mpl, clucoeff])
+
+    aux = []
+    if len(aux) == 0: return np.array([0] * FEATLEN)
 
     aux = np.array(aux)
     ws = aux[:, 0] / np.sum(aux[:, 0])
@@ -372,10 +376,10 @@ def run_experiment(top, nreq, k, h, runid, coincexp, isext, outdir):
 
     random.seed(runid); np.random.seed(runid) # Random seed
 
-    t = 0.65
-    mincompsz = 4
-    # t = 0.5 #TODO: debug
-    # mincompsz = 2 # TODO: debug
+    # t = 0.65
+    # mincompsz = 4
+    t = 0.5 #TODO: debug
+    mincompsz = 2 # TODO: debug
 
     op = {
         'graphorig': pjoin(outdir, '{}_0graphorig.png'.format(expidstr)),
@@ -404,7 +408,6 @@ def run_experiment(top, nreq, k, h, runid, coincexp, isext, outdir):
     g.vs[CID] = gcoinc.vs[CID]
     membstr = [str(x) for x in g.vs[CID]]
 
-    
     _ = plot_graph(g, coords1, vlbls, vszs, op['graphorig'])
     # feats = get_num_adjacent_groups_all(g)
     feats = [n]
