@@ -1,0 +1,8 @@
+{
+	"modeltop": ["ba","er","gr"],
+	"modeln": [350],
+	"modelk": [15],
+	"h": [2],
+	"extmodel": ["/tmp/foo","/tmp/foo.graphml"],
+	"nruns": 100
+}

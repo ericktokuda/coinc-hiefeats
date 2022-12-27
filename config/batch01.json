@@ -1,0 +1,9 @@
+{
+	"modeltop": ["ba", "er", "gr"],
+	"modeln": [347,400],
+	"modelk": [6,15],
+	"h": [2],
+	"extmodel": ["/tmp/foo","/tmp/foo.graphml"],
+	"coincexp": [3],
+	"nruns": 100
+}

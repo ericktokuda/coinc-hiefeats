@@ -1,0 +1,9 @@
+{
+	"modeltop": ["er"],
+	"modeln": [100],
+	"modelk": [7],
+	"h": [2],
+	"extmodel": ["data/topo15.graphml"],
+	"coincexp": [3],
+	"nruns": 2
+}

@@ -19,6 +19,7 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from itertools import product, combinations
 from myutils import parallelize
+import json
 
 CID = 'compid'
 ##########################################################
@@ -125,7 +126,6 @@ def calculate_hierclucoeff(he, hn):
 
 ##########################################################
 def calculate_hieconvratio(hd, hnnxt):
-    #TODO: define what to do when hn = 0
     if hnnxt == 0: return 0
     return hd / hnnxt
 
@@ -163,13 +163,9 @@ def vattributes2edges(g, attribs, aggreg='sum'):
     return g
 
 ##########################################################
-def generate_graph(modelstr, outdir):
+def generate_graph(model, n, k, outdir):
     """Generate an undirected graph according to @modelstr. It should be MODEL,N,PARAM"""
     # info(inspect.stack()[0][3] + '()')
-    parsed = modelstr.split(',')
-    model = parsed[0];
-    n = int(parsed[1])
-    k = float(parsed[2])
 
     if model == 'er':
         erdosprob = k / n
@@ -182,6 +178,12 @@ def generate_graph(modelstr, outdir):
     elif model == 'gr':
         r = get_rgg_params(n, k)
         g = igraph.Graph.GRG(n, radius=r, torus=False)
+    elif model.endswith('.graphml'):
+        g = igraph.Graph.Read_GraphML(model)
+        g.vs['wid'] = [int(x) for x in g.vs['wid']]
+        del g.vs['id'] # From graphml
+    else:
+        raise Exception('Invalid model')
 
     g.to_undirected()
     g = g.connected_components().giant()
@@ -352,7 +354,6 @@ def get_feats_from_components(g, mincompsz):
     aux2 = aux[:, 1] * ws
     data = np.column_stack((aux, aux2))
 
-
     means = data.mean(axis=0)
     stds = data.std(axis=0)
 
@@ -363,15 +364,16 @@ def get_feats_from_components(g, mincompsz):
     return feats
 
 ##########################################################
-def run_experiment(modelstr, h, runid, outdir):
-    expidstr = '{}_{}'.format(modelstr, runid)
-    info(expidstr)
+def run_experiment(top, nreq, k, h, runid, coincexp, isext, outdir):
+
+    name = os.path.basename(top).replace('.graphml', '') if isext else top
+    expidstr = '{}_{}_{}_{}_{:03d}'.format(name, nreq, k, h, runid)
+
     random.seed(runid); np.random.seed(runid) # Random seed
 
     t = 0.65
     mincompsz = 4
-    coincexp = 3
-    # t = 0.4 #TODO: debug
+    # t = 0.5 #TODO: debug
     # mincompsz = 2 # TODO: debug
 
     op = {
@@ -379,7 +381,7 @@ def run_experiment(modelstr, h, runid, outdir):
         'graphcoinc': pjoin(outdir, '{}_1graphcoinc.png'.format(expidstr)),
     }
 
-    g, adj = generate_graph(modelstr, outdir)
+    g, adj = generate_graph(top, nreq, k, outdir)
     n = g.vcount()
     vszs = np.array(g.degree()) + 1 # In case it is zero
 
@@ -401,6 +403,7 @@ def run_experiment(modelstr, h, runid, outdir):
     g.vs[CID] = gcoinc.vs[CID]
     membstr = [str(x) for x in g.vs[CID]]
 
+    
     _ = plot_graph(g, coords1, vlbls, vszs, op['graphorig'])
     # feats = get_num_adjacent_groups_all(g)
     feats = [n]
@@ -408,25 +411,38 @@ def run_experiment(modelstr, h, runid, outdir):
     return feats
 
 ##########################################################
-def run_experiments_all(modelstr, hs, runids, nprocs, outdir):
+def run_experiments_all(cfgpath, nprocs, outdir):
     info(inspect.stack()[0][3] + '()')
+
     outpath = pjoin(outdir, 'res.csv')
     if os.path.isfile(outpath): return pd.read_csv(outpath)
-    argsconcat = [x for x in product(modelstr, hs, runids, [outdir])]
-    # argsconcat = reversed(argsconcat)
 
+    cfg = json.load(open(cfgpath))
+
+    tops = cfg['modeltop']
+    ns = cfg['modeln']
+    ks = cfg['modelk']
+    hs = cfg['h']
+    coincexp = cfg['coincexp']
+    exts = cfg['extmodel']
+    runids = range(cfg['nruns'])
+
+    argsconcat = list(product(tops, ns, ks,  hs, runids, coincexp, [False], [outdir]))
+    argsconcat.extend(list(product(exts, [-1], [-1],  hs, [0], coincexp, [True], [outdir])))
     featsall = parallelize(run_experiment, nprocs, argsconcat)
 
-    params1 = np.array([x[0].split(',') for x in argsconcat], dtype=object)
-    params2 = np.array([x[2] for x in argsconcat], dtype=object).reshape(-1, 1)
+    params = np.array([x[:-1] for x in argsconcat], dtype=object)
+
     featsall = np.array(featsall, dtype=object)
-    featsall = np.column_stack((params1, params2, featsall))
-    cols = ['model', 'nreq', 'k', 'x', 'runid', 'nreal', 'ncomps', 'szmax',
-            'szmean', 'szstd', 'degmeanmean', 'degmeanstd',
-            'degstdmean', 'degstdstd', 'degmeanwmean', 'degmeanwstd',
+    featsall = np.column_stack((params, featsall))
+
+    cols = ['model', 'nreq', 'k', 'h', 'runid', 'coincexp', 'isext',
+            'nreal', 'ncomps', 'szmax', 'szmean', 'szstd',
+            'degmeanmean', 'degmeanstd', 'degstdmean', 'degstdstd',
+            'degmeanwmean', 'degmeanwstd',
             'mplmean', 'mplstd', 'transmean', 'transstd']
-    df = pd.DataFrame(featsall, columns=cols)
-    df.to_csv(outpath, index=False)
+    df = pd.DataFrame(featsall.tolist(), columns=cols)
+    df.to_csv(outpath, index=False, float_format='%.3f')
     return df
 
 ##########################################################
@@ -443,6 +459,7 @@ def plot_results(df, outdir):
         fig, ax = plt.subplots()
         for model in models:
             z = df.loc[df.model == model][feat]
+            if len(z) == 0: continue
             df.loc[df.model == model][feat].plot.kde(ax=ax, label=model, legend=True)
         ax.set_ylabel('')
         ax.set_xlabel(feat[0].upper() + feat[1:])
@@ -450,24 +467,8 @@ def plot_results(df, outdir):
         plt.close()
 
 ##########################################################
-def main(nruns, nprocs, outdir):
-    info(inspect.stack()[0][3] + '()')
-
-    runids = range(nruns)
-    hs = [2]
-
-    n = 400
-    k = 6
-    # n = 50 # TODO: debug
-    # k = 6
-    modelstr = [
-            'er,N,K,0',
-            'gr,N,K,0',
-            'ba,N,K,0',
-            ]
-    modelstr = [m.replace('N', str(n)).replace('K', str(k)) for m in modelstr]
-
-    df = run_experiments_all(modelstr, hs, runids, nprocs, outdir)
+def main(cfgpath, nprocs, outdir):
+    df = run_experiments_all(cfgpath, nprocs, outdir)
     plot_results(df, outdir)
 
 ##########################################################
@@ -475,14 +476,13 @@ if __name__ == "__main__":
     info(datetime.date.today())
     t0 = time.time()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--nruns', default=2, type=int,
-                        help='Number of runs for each experiment')
+    parser.add_argument('--config', default='config/toy01.json', help='Experiments settings')
     parser.add_argument('--nprocs', default=1, type=int, help='Number of procs')
     parser.add_argument('--outdir', default='/tmp/out/', help='Output directory')
     args = parser.parse_args()
 
     os.makedirs(args.outdir, exist_ok=True)
     readmepath = create_readme(sys.argv, args.outdir)
-    main(args.nruns, args.nprocs, args.outdir)
+    main(args.config, args.nprocs, args.outdir)
     info('Elapsed time:{:.02f}s'.format(time.time()-t0))
     info('Output generated in {}'.format(args.outdir))

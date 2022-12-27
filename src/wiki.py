@@ -86,7 +86,7 @@ def main(query, snap1path, snap2path, logpath, outdir):
     ids2 = get_out_page_ids(queryid, df2)
     ids = np.concatenate((ids1, ids2))
 
-    log('Full graph (vs from either snapshots) n:{}'.format(len(ids)))
+    # log('Full graph (vs from either snapshots) n:{}'.format(len(ids)))
 
     df1aux = filter_df_by_ids(df1, ids, removeid=queryid)
     df2aux = filter_df_by_ids(df2, ids, removeid=queryid)
@@ -109,8 +109,8 @@ def main(query, snap1path, snap2path, logpath, outdir):
 
     n1 = len(get_id_all_pages(df1filt))
     n2 = len(get_id_all_pages(df2filt))
-    log('n:{}, n1:{}, n2:{}, m1:{}, m2:{}'. \
-         format(len(df4), n1, n2, len(df1filt), len(df2filt)))
+    log('orign1:{}, orign2:{}, n:{}, m1:{}, m2:{}'. \
+         format(n1, n2, len(df4), len(df1filt), len(df2filt)))
 
     # Reindex
     df1filt = convert_wids_to_vids(df1filt, uid2vid)
