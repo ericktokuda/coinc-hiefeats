@@ -183,6 +183,20 @@ def generate_graph(model, n, k, outdir):
         g = igraph.Graph.Read_GraphML(model)
         g.vs['wid'] = [int(x) for x in g.vs['wid']]
         del g.vs['id'] # From graphml
+    elif model == 'sb':
+        if n == 200 and k == 6: p1 = .07
+        elif n == 350 and k == 6: p1 = .04
+        elif n == 500 and k == 6: p1 = .0279
+        elif n == 200 and k == 12: p1 = .0798
+        elif n == 200 and k == 18: p1 = .1197
+        else: p1 = .1
+
+        p2 = p1 / 10
+        pref = np.diag([p1, p1, p1]) + p2
+        n1 = int(n / 3)
+        szs = [n1, n1, n - 2 * n1]
+        g = igraph.Graph.SBM(n, pref.tolist(), szs, directed=False, loops=False)
+
     else:
         raise Exception('Invalid model')
 
@@ -190,7 +204,7 @@ def generate_graph(model, n, k, outdir):
     g = g.connected_components().giant()
     g.simplify()
 
-    gpath = pjoin(outdir, 'graph.png')
+    # gpath = pjoin(outdir, 'graph.png')
     coords = g.layout(layout='fr')
     return g, g.get_adjacency_sparse()
 
@@ -351,7 +365,6 @@ def get_feats_from_components(g, mincompsz):
         clucoeff = gcomp.transitivity_avglocal_undirected()
         aux.append([sz, np.mean(degs), np.std(degs), mpl, clucoeff])
 
-    aux = []
     if len(aux) == 0: return np.array([0] * FEATLEN)
 
     aux = np.array(aux)
@@ -373,13 +386,14 @@ def run_experiment(top, nreq, k, h, runid, coincexp, isext, outdir):
 
     name = os.path.basename(top).replace('.graphml', '') if isext else top
     expidstr = '{}_{}_{}_{}_{:03d}'.format(name, nreq, k, h, runid)
+    info(expidstr)
 
     random.seed(runid); np.random.seed(runid) # Random seed
 
-    # t = 0.65
-    # mincompsz = 4
-    t = 0.5 #TODO: debug
-    mincompsz = 2 # TODO: debug
+    t = 0.65
+    mincompsz = 4
+    # t = 0.5 #TODO: debug
+    # mincompsz = 2 # TODO: debug
 
     op = {
         'graphorig': pjoin(outdir, '{}_0graphorig.png'.format(expidstr)),
