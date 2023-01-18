@@ -238,7 +238,7 @@ def plot_graph(g, coordsin, labels, vsizes, outpath):
     visual_style["margin"] = 10
     visual_style['vertex_label'] = labels
     visual_style['vertex_color'] = 'blue'
-    visual_style['vertex_size'] = vsizes
+    # visual_style['vertex_size'] = vsizes
     visual_style['vertex_frame_width'] = 0
     igraph.plot(g, outpath, **visual_style)
     return coords
@@ -429,7 +429,7 @@ def run_experiment(top, nreq, k, h, runid, coincexp, isext, outdir):
     return feats
 
 ##########################################################
-def run_experiments_all(cfgpath, nprocs, outdir):
+def main(cfgpath, nprocs, outdir):
     info(inspect.stack()[0][3] + '()')
 
     outpath = pjoin(outdir, 'res.csv')
@@ -462,32 +462,6 @@ def run_experiments_all(cfgpath, nprocs, outdir):
     df = pd.DataFrame(featsall.tolist(), columns=cols)
     df.to_csv(outpath, index=False, float_format='%.3f')
     return df
-
-##########################################################
-def plot_results(df, outdir):
-    info(inspect.stack()[0][3] + '()')
-    plotdir = pjoin(outdir, 'plots')
-    os.makedirs(plotdir, exist_ok=True)
-    feats = ['ncomps', 'szmax', 'szmean', 'szstd', 'degmeanmean', 'degmeanstd',
-             'degstdmean', 'degstdstd', 'mplmean', 'mplstd',
-             'transmean', 'transstd']
-    models = ['er', 'gr', 'ba']
-    for feat in feats:
-        plotpath = pjoin(plotdir, feat + '.png')
-        fig, ax = plt.subplots()
-        for model in models:
-            z = df.loc[df.model == model][feat]
-            if len(z) == 0: continue
-            df.loc[df.model == model][feat].plot.kde(ax=ax, label=model, legend=True)
-        ax.set_ylabel('')
-        ax.set_xlabel(feat[0].upper() + feat[1:])
-        plt.savefig(plotpath)
-        plt.close()
-
-##########################################################
-def main(cfgpath, nprocs, outdir):
-    df = run_experiments_all(cfgpath, nprocs, outdir)
-    plot_results(df, outdir)
 
 ##########################################################
 if __name__ == "__main__":
