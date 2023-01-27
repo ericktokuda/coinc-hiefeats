@@ -395,9 +395,11 @@ def run_experiment(top, nreq, k, h, runid, coincexp, isext, outdir):
     # t = 0.5 #TODO: debug
     # mincompsz = 2 # TODO: debug
 
+    visdir = pjoin(outdir, 'vis')
+    os.makedirs(visdir, exist_ok=True
     op = {
-        'graphorig': pjoin(outdir, '{}_0graphorig.png'.format(expidstr)),
-        'graphcoinc': pjoin(outdir, '{}_1graphcoinc.png'.format(expidstr)),
+        'graphorig': pjoin(visdir, '{}_0graphorig.png'.format(expidstr)),
+        'graphcoinc': pjoin(visdir, '{}_1graphcoinc.png'.format(expidstr)),
     }
 
     g, adj = generate_graph(top, nreq, k, outdir)
@@ -411,6 +413,41 @@ def run_experiment(top, nreq, k, h, runid, coincexp, isext, outdir):
     vfeats, featlbls = extract_features(adj, h)
     coinc = get_coincidx_values(vfeats, .5, True)
     coinc = np.power(coinc, coincexp)
+
+    k0 = 5
+    def f(thresh):
+        coinc2 = coinc.copy()
+        coinc2[coinc2 <= thresh] = 0
+        coinc2[coinc2 > 0] = 1
+        g = igraph.Graph.Adjacency(coinc2.astype(int), mode='undirected')
+        return np.mean(g.degree()) - k0
+
+    def my_bisection(f, a, b, tol):
+        fa, fb = f(a), f(b)
+        if np.sign(fa) == np.sign(fb):
+            raise Exception(
+             "The scalars a and b do not bound a root")
+
+        ms, fs = [], []
+        niters = 100
+        for iter in range(niters):
+            m = (a + b)/2
+            fm = f(m)
+            ms.append(m)
+            fs.append(fm)
+
+            if np.abs(fm) < tol:
+                break
+            elif np.sign(fa) == np.sign(fm):
+                a = m
+                fa = f(a)
+            elif np.sign(fb) == np.sign(fm):
+                b = m
+                fb = f(b)
+        return ms, fs
+
+    xs, fs = my_bisection(f, 0 ,1, .01)
+    t = xs[np.argmin(np.abs(fs))]
 
     coinc = threshold_values(coinc, t)
 

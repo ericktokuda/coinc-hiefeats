@@ -25,7 +25,8 @@ def plot_results(df, outdir):
              'transmean', 'transstd']
 
     models = ['er', 'gr', 'ba', 'sb']
-    ns = [200, 350, 500]
+    # ns = [200, 350, 500]
+    ns = [350]
     ks = [6, 12, 18]
     for n in ns:
         for k in ks:
